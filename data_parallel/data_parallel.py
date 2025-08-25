@@ -311,7 +311,7 @@ def data_parallel_main(args):
     for epoch in tqdm(range(epochs)):
         train_stats = time_train_epoch(
             model,
-            random_train_loader,
+            sanity_loader,
             optimizer,
             criterion,
             device,
@@ -320,7 +320,7 @@ def data_parallel_main(args):
             warmup_batches=2,
         )
         test_stats = time_test_epoch(
-            model, random_test_loader, criterion, device, visible_devices
+            model, sanity_loader, criterion, device, visible_devices
         )
 
         scheduler.step()
