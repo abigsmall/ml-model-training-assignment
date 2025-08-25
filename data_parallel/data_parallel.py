@@ -220,10 +220,10 @@ def data_parallel_main(args):
     test_transform = models.ResNet152_Weights.DEFAULT.transforms()
     train_transform = T.Compose(
         [
-            T.ToImage(),
+            T.ToImageTensor(),
             T.RandomResizedCrop(224),
             T.RandomHorizontalFlip(),
-            T.ToDtype(torch.float32, scale=True),
+            T.ConvertDtype(torch.float32),
             T.Normalize(test_transform.mean, test_transform.std),
         ]
     )
