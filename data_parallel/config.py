@@ -10,8 +10,8 @@ epochs = 1
 tv_model_path = '/home/ubuntu/ml-model-training-assignment/model_data'
 
 # Path Imagenette is at
-imagenette_train_path = '/home/ubuntu/ml-model-training-assignment/imagenette/train'
-imagenette_test_path = '/home/ubuntu/ml-model-training-assignment/imagenette/val'
+imagenette_train_path = '/home/ubuntu/imagenette2/train'
+imagenette_test_path = '/home/ubuntu/imagenette2/val'
 
 train_data_size = 100
 test_data_size = 20
