@@ -343,7 +343,7 @@ def data_parallel_main(args):
 
 
 if __name__ == "__main__":
-    total_devices = len(cfg.visible_devices)
+    total_devices = len(cfg.visible_devices) if cfg.do_data_parallel else 1
     print(f"Training on {total_devices} devices")
     batch_size = cfg.per_device_batch_size * total_devices
     print("Per Device Batch Size = ", cfg.per_device_batch_size)
@@ -353,6 +353,7 @@ if __name__ == "__main__":
     print("Number of workers for dataloaders = ", dataloader_num_workers)
 
     args = {
+        "do_data_parallel": cfg.do_data_parallel,
         "batch_size": batch_size,
         "dataloader_num_workers": dataloader_num_workers,
         "learning_rate": cfg.learning_rate,
