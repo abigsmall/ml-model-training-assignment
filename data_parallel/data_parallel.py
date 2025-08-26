@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision
 from torchvision import models, datasets
+torchvision.disable_beta_transforms_warning()
 from torchvision.transforms import v2 as T
 from torch.utils.data import DataLoader, SubsetRandomSampler, Subset
 
