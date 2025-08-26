@@ -221,7 +221,7 @@ def data_parallel_main(args):
     train_transform = T.Compose(
         [
             T.ToImageTensor(),
-            T.RandomResizedCrop(224),
+            T.RandomResizedCrop(224, antialias=True),
             T.RandomHorizontalFlip(),
             T.ConvertDtype(torch.float32),
             T.Normalize(test_transform.mean, test_transform.std),
