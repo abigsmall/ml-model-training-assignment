@@ -384,10 +384,12 @@ if __name__ == "__main__":
     print(f"{torch.cuda.get_device_name(0) = }")
 
     results = data_parallel_main(args)
-    print(f'Final loss = {results["loss"]}')
-    
+    print(f"Final loss = {results['loss']}")
+
     train_peak_memory = results["per_device_peaks"]["train"]
     test_peak_memory = results["per_device_peaks"]["test"]
-    max_memory_consumed = max(max(x[1] for x in train_peak_memory), max(x[1] for x in test_peak_memory))
+    max_memory_consumed = max(
+        max(x[1] for x in train_peak_memory), max(x[1] for x in test_peak_memory)
+    )
     max_memory_consumed = round(max_memory_consumed * 1.073741824, 2)
     print(f"Max Memory Consumed Per Device = {max_memory_consumed} GB")
