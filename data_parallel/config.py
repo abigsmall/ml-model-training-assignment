@@ -13,8 +13,8 @@ tv_model_path = '/home/ubuntu/ml-model-training-assignment/model_data'
 imagenette_train_path = '/home/ubuntu/imagenette2/train'
 imagenette_test_path = '/home/ubuntu/imagenette2/val'
 
-train_data_size = 200
-test_data_size = 40
+train_data_size = 9469
+test_data_size = 3925
 
 device = 'cuda'
 

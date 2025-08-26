@@ -234,9 +234,11 @@ def data_parallel_main(args):
     test_dataset = datasets.ImageFolder(imagenette_test_path, transform=test_transform)
 
     if train_data_size < len(train_dataset):
+        print("Using subset for train_dataset")
         train_dataset = Subset(train_dataset, range(train_data_size))
 
     if test_data_size < len(test_dataset):
+        print("Using subset for test_dataset")
         test_dataset = Subset(test_dataset, range(test_data_size))
 
     train_loader = DataLoader(
