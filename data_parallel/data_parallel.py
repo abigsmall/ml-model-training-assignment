@@ -233,49 +233,49 @@ def data_parallel_main(args):
     )
     test_dataset = datasets.ImageFolder(imagenette_test_path, transform=test_transform)
 
-    # train_loader = DataLoader(
-    #     train_dataset,
-    #     batch_size=batch_size,
-    #     shuffle=True,
-    #     num_workers=dataloader_num_workers,
-    #     pin_memory=True,
-    # )
-    # test_loader = DataLoader(
-    #     test_dataset,
-    #     batch_size=batch_size,
-    #     shuffle=True,
-    #     num_workers=dataloader_num_workers,
-    #     pin_memory=True,
-    # )
-
-    # if we want to randomly select instead
-    random_train_indices = np.random.choice(
-        len(train_dataset), train_data_size, replace=False
-    )
-    random_train_sampler = SubsetRandomSampler(random_train_indices)
-
-    random_test_indices = np.random.choice(
-        len(test_dataset), test_data_size, replace=False
-    )
-    random_test_sampler = SubsetRandomSampler(random_test_indices)
-
-    random_train_loader = DataLoader(
+    train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        sampler=random_train_sampler,
+        shuffle=True,
         num_workers=dataloader_num_workers,
         pin_memory=True,
     )
-    random_test_loader = DataLoader(
+    test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
-        sampler=random_test_sampler,
+        shuffle=True,
         num_workers=dataloader_num_workers,
         pin_memory=True,
     )
 
-    print(f"{random_train_indices = }")
-    print(f"{random_test_indices = }")
+    # # if we want to randomly select instead
+    # random_train_indices = np.random.choice(
+    #     len(train_dataset), train_data_size, replace=False
+    # )
+    # random_train_sampler = SubsetRandomSampler(random_train_indices)
+
+    # random_test_indices = np.random.choice(
+    #     len(test_dataset), test_data_size, replace=False
+    # )
+    # random_test_sampler = SubsetRandomSampler(random_test_indices)
+
+    # random_train_loader = DataLoader(
+    #     train_dataset,
+    #     batch_size=batch_size,
+    #     sampler=random_train_sampler,
+    #     num_workers=dataloader_num_workers,
+    #     pin_memory=True,
+    # )
+    # random_test_loader = DataLoader(
+    #     test_dataset,
+    #     batch_size=batch_size,
+    #     sampler=random_test_sampler,
+    #     num_workers=dataloader_num_workers,
+    #     pin_memory=True,
+    # )
+
+    # print(f"{random_train_indices = }")
+    # print(f"{random_test_indices = }")
 
     # # if we want to run a quick sanity check with the first 4 images
     # sanity_indices = list(range(4))
@@ -311,7 +311,7 @@ def data_parallel_main(args):
     for epoch in tqdm(range(epochs)):
         train_stats = time_train_epoch(
             model,
-            random_train_loader,
+            train_loader,
             optimizer,
             criterion,
             device,
@@ -320,7 +320,7 @@ def data_parallel_main(args):
             warmup_batches=2,
         )
         test_stats = time_test_epoch(
-            model, random_test_loader, criterion, device, visible_devices
+            model, test_loader, criterion, device, visible_devices
         )
 
         scheduler.step()
