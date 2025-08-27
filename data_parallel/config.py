@@ -1,7 +1,7 @@
 # Define hyperparameters
 do_data_parallel = True
 
-per_device_batch_size = 77
+per_device_batch_size = 78
 dataloader_num_workers = 16
 learning_rate = 1e-4
 epochs = 1
