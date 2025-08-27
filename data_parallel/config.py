@@ -2,7 +2,7 @@
 do_data_parallel = True
 
 per_device_batch_size = 16
-dataloader_num_workers = 8
+dataloader_num_workers = 4
 learning_rate = 1e-4
 epochs = 1
 
