@@ -344,12 +344,15 @@ def data_parallel_main(args):
         print("• test:")
         print_peaks(test_stats["per_device_peaks"], prefix="  ")
 
+    elapsed = time.perf_counter() - t0
+    time_per_epoch_s = elapsed / epochs
     print(
-        f"Time taken per epoch (seconds) {((time.perf_counter() - t0) / epochs):.2f}s"
+        f"Time taken per epoch (seconds) {time_per_epoch_s:.2f}s"
     )
 
     return {
         "loss": train_stats["loss"],
+        "time_per_epoch_s": time_per_epoch_s,
         "per_device_peaks": {
             "train": train_stats["per_device_peaks"],
             "test": test_stats["per_device_peaks"],
@@ -393,7 +396,8 @@ if __name__ == "__main__":
     print(f"{torch.cuda.get_device_name(0) = }")
 
     results = data_parallel_main(args)
-    print(f"Final loss = {results['loss']}")
+    loss = results['loss']
+    print(f"Final loss = {loss}")
 
     train_peak_memory = results["per_device_peaks"]["train"]
     test_peak_memory = results["per_device_peaks"]["test"]
@@ -402,3 +406,4 @@ if __name__ == "__main__":
     )
     max_memory_consumed = round(max_memory_consumed * 1.073741824, 2)
     print(f"Max Memory Consumed Per Device = {max_memory_consumed} GB")
+    print(f"loss: {loss:.4f} | {results['time_per_epoch_s']:.2f}s | {max_memory_consumed} GB")
