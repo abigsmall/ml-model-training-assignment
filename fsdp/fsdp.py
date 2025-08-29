@@ -81,6 +81,32 @@ def print_peaks(per_dev, prefix=""):
         )
 
 
+def gather_peak_memory_gib(local_device, group=None, return_on_all_ranks=False):
+    # local peaks (GiB)
+    alloc_gib = torch.cuda.max_memory_allocated(local_device) // (1024**3)
+    reserv_gib = torch.cuda.max_memory_reserved(local_device) // (1024**3)
+    local = torch.tensor([alloc_gib, reserv_gib], device=local_device)
+
+    if not dist.is_available() or not dist.is_initialized():
+        return np.array([[alloc_gib, reserv_gib]])
+
+    world_size = dist.get_world_size(group=group)
+    rank = dist.get_rank(group=group)
+
+    gathered = [torch.zeros_like(local) for _ in range(world_size)]
+    dist.all_gather(gathered, local, group=group)
+
+    arr = torch.stack(gathered).cpu().numpy()
+    if return_on_all_ranks or rank == 0:
+        return arr
+    return None
+
+
+def peaks_from_gather(arr):
+    # arr: np.ndarray [world_size, 2]
+    return [(f"rank {i}", float(a), float(r)) for i, (a, r) in enumerate(arr)]
+
+
 def warmup_training(
     model,
     rank,
@@ -171,8 +197,10 @@ def time_train_epoch(
     dist.all_reduce(loss_sum, op=dist.ReduceOp.SUM)
     print(f"rank: {rank} | len(loader): {len(loader)} | loss_sum[1]: {loss_sum[1]} | loss_sum[2]: {loss_sum[2]}")
 
-    # TODO: fix this
-    per_device_peaks = peek_peaks_all(device_ids)
+    arr = gather_peak_memory_gib(rank, return_on_all_ranks=False)
+    per_device_peaks = []
+    if arr is not None:
+        per_device_peaks = peek_peaks_all(peaks_from_gather(arr))
 
     return {
         "time_s": round(elapsed, 3),
@@ -216,8 +244,10 @@ def time_test_epoch(
     dist.all_reduce(eval_stats, op=dist.ReduceOp.SUM)
     print(f"rank: {rank} | reduced total: {eval_stats[0]} | reduced correct: {eval_stats[1]} | reduced loss_sum: {eval_stats[2]}")
 
-    # TODO: fix this
-    per_device_peaks = peek_peaks_all(device_ids)
+    arr = gather_peak_memory_gib(rank, return_on_all_ranks=False)
+    per_device_peaks = []
+    if arr is not None:
+        per_device_peaks = peek_peaks_all(peaks_from_gather(arr))
 
     return {
         "time_s": round(elapsed, 3),
