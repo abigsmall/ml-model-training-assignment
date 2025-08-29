@@ -401,6 +401,10 @@ if __name__ == "__main__":
 
     train_peak_memory = results["per_device_peaks"]["train"]
     test_peak_memory = results["per_device_peaks"]["test"]
+    print(f"{type(train_peak_memory) = }")
+    print(f"{train_peak_memory =}")
+    print(f"{type(test_peak_memory) = }")
+    print(f"{test_peak_memory =}")
     max_memory_consumed = max(
         max(x[1] for x in train_peak_memory), max(x[1] for x in test_peak_memory)
     )

@@ -1,10 +1,10 @@
 # Define hyperparameters
 do_data_parallel = True
 
-per_device_batch_size = 32
-dataloader_num_workers = 4
+per_device_batch_size = 1
+dataloader_num_workers = 2
 learning_rate = 1e-4
-epochs = 3
+epochs = 1
 
 # Path PyTorch should save model to
 tv_model_path = '/home/ubuntu/ml-model-training-assignment/model_data'
@@ -14,8 +14,8 @@ imagenette_train_path = '/home/ubuntu/imagenette2/train'
 imagenette_test_path = '/home/ubuntu/imagenette2/val'
 
 # -1 means full dataset
-train_data_size = -1
-test_data_size = -1
+train_data_size = 4
+test_data_size = 4
 
 device = 'cuda'
 
