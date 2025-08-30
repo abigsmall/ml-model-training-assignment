@@ -1,8 +1,8 @@
 # Define hyperparameters
-per_device_batch_size = 80
+per_device_batch_size = 32
 dataloader_num_workers = 4
 learning_rate = 1e-4
-epochs = 1
+epochs = 3
 
 # Path PyTorch should save model to
 tv_model_path = '/home/ubuntu/ml-model-training-assignment/model_data'
