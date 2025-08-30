@@ -198,9 +198,11 @@ def time_train_epoch(
     print(f"rank: {rank} | len(loader): {len(loader)} | loss_sum[1]: {loss_sum[1]} | loss_sum[2]: {loss_sum[2]}")
 
     arr = gather_peak_memory_gib(rank, return_on_all_ranks=False)
+    print(f"{rank}: {arr =} | {type(arr) =} | {arr is not None and arr.shape =}")
     per_device_peaks = []
     if arr is not None:
         per_device_peaks = peek_peaks_all(peaks_from_gather(arr))
+        print(f"rank: {rank}: {per_device_peaks=} | {len(per_device_peaks) =} | {type(per_device_peaks[0]) =} | {type(per_device_peaks[1]) =} | {type(per_device_peaks[2]) =}")
 
     return {
         "time_s": round(elapsed, 3),
@@ -365,7 +367,7 @@ def fsdp_main(args):
         if local_rank == 0:
             print(
                 "\n"
-                f"Epoch {epoch + 1}/{epochs} | "
+                f"Epoch {epoch}/{epochs} | "
                 f"train: loss {train_stats['loss']:.4f}, time {train_stats['time_s']:.1f}s | "
                 f"test: loss {test_stats['loss']:.4f}, acc {test_stats['accuracy']:.3f}, time {test_stats['time_s']:.1f}s"
             )
@@ -436,16 +438,15 @@ if __name__ == "__main__":
         print(f"{torch.cuda.get_device_name(0) = }")
 
     results = fsdp_main(args)
-    loss = results['loss']
     if local_rank == 0:
+        loss = results['loss']
         print(f"Final loss = {loss}")
 
-    train_peak_memory = results["per_device_peaks"]["train"]
-    test_peak_memory = results["per_device_peaks"]["test"]
-    max_memory_consumed = max(
-        max(x[1] for x in train_peak_memory), max(x[1] for x in test_peak_memory)
-    )
-    max_memory_consumed = round(max_memory_consumed * 1.073741824, 2)
-    if local_rank == 0:
+        train_peak_memory = results["per_device_peaks"]["train"]
+        test_peak_memory = results["per_device_peaks"]["test"]
+        max_memory_consumed = max(
+            max(x[1] for x in train_peak_memory), max(x[1] for x in test_peak_memory)
+        )
+        max_memory_consumed = round(max_memory_consumed * 1.073741824, 2)
         print(f"Max Memory Consumed Per Device = {max_memory_consumed} GB")
         print(f"loss: {loss:.4f} | {results['time_per_epoch_s']:.2f}s | {max_memory_consumed} GB")
