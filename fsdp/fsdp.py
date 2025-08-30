@@ -31,7 +31,7 @@ def setup():
 def cleanup():
     dist.destroy_process_group()
 
-def set_seed(seed):
+def set_seed(seed, rank):
     """Set seeds for reproducibility."""
     random.seed(seed)
     np.random.seed(seed)
@@ -41,27 +41,8 @@ def set_seed(seed):
     # Optional: If you use cudnn backend and want to be even more rigorous
     # torch.backends.cudnn.deterministic = True
     # torch.backends.cudnn.benchmark = False
-    print(f"Seeds set to {seed}")
-
-
-def reset_peaks_all(devices=None):
-    """Reset peak memory stats on all (visible) CUDA devices."""
-    if devices is None:
-        devices = list(range(torch.cuda.device_count()))
-    for d in devices:
-        torch.cuda.reset_peak_memory_stats(d)
-
-
-def peek_peaks_all(devices=None):
-    """Read peak allocated / reserved (in GiB) for all devices."""
-    if devices is None:
-        devices = list(range(torch.cuda.device_count()))
-    per_dev = []
-    for d in devices:
-        alloc_gib = torch.cuda.max_memory_allocated(d) / (1024**3)
-        reserv_gib = torch.cuda.max_memory_reserved(d) / (1024**3)
-        per_dev.append((d, round(alloc_gib, 3), round(reserv_gib, 3)))
-    return per_dev
+    if (rank == 0):
+        print(f"Seeds set to {seed}")
 
 
 def print_peaks(per_dev, prefix=""):
@@ -83,8 +64,8 @@ def print_peaks(per_dev, prefix=""):
 
 def gather_peak_memory_gib(local_device, group=None, return_on_all_ranks=False):
     # local peaks (GiB)
-    alloc_gib = torch.cuda.max_memory_allocated(local_device) // (1024**3)
-    reserv_gib = torch.cuda.max_memory_reserved(local_device) // (1024**3)
+    alloc_gib = torch.cuda.max_memory_allocated(local_device) / (1024**3)
+    reserv_gib = torch.cuda.max_memory_reserved(local_device) / (1024**3)
     local = torch.tensor([alloc_gib, reserv_gib], device=local_device)
 
     if not dist.is_available() or not dist.is_initialized():
@@ -104,7 +85,7 @@ def gather_peak_memory_gib(local_device, group=None, return_on_all_ranks=False):
 
 def peaks_from_gather(arr):
     # arr: np.ndarray [world_size, 2]
-    return [(f"rank {i}", float(a), float(r)) for i, (a, r) in enumerate(arr)]
+    return [(i, float(a), float(r)) for i, (a, r) in enumerate(arr)]
 
 
 def warmup_training(
@@ -174,6 +155,7 @@ def time_train_epoch(
     torch.cuda.reset_peak_memory_stats()
 
     t0 = time.perf_counter()
+    # 0: loss_sum, 1: total
     loss_sum = torch.zeros(3).to(rank)
 
     for batch in tqdm(loader):
@@ -194,15 +176,14 @@ def time_train_epoch(
     elapsed = round(time.perf_counter() - t0, 3)
 
     # Sum the loss across all distributed processes
+    print(f"train: before reduce: rank: {rank} | len(loader.dataset): {len(loader.dataset)} | len(loader): {len(loader)} | loss_sum[0]: {loss_sum[0]} | loss_sum[1]: {loss_sum[1]} | loss_sum[2]: {loss_sum[2]}")
     dist.all_reduce(loss_sum, op=dist.ReduceOp.SUM)
-    print(f"rank: {rank} | len(loader): {len(loader)} | loss_sum[1]: {loss_sum[1]} | loss_sum[2]: {loss_sum[2]}")
+    print(f"train: after reduce: rank: {rank} | len(loader.dataset): {len(loader.dataset)} | len(loader): {len(loader)} | loss_sum[0]: {loss_sum[0]} | loss_sum[1]: {loss_sum[1]} | loss_sum[2]: {loss_sum[2]}")
 
     arr = gather_peak_memory_gib(rank, return_on_all_ranks=False)
-    print(f"{rank}: {arr =} | {type(arr) =} | {arr is not None and arr.shape =}")
     per_device_peaks = []
     if arr is not None:
-        per_device_peaks = peek_peaks_all(peaks_from_gather(arr))
-        print(f"rank: {rank}: {per_device_peaks=} | {len(per_device_peaks) =} | {type(per_device_peaks[0]) =} | {type(per_device_peaks[1]) =} | {type(per_device_peaks[2]) =}")
+        per_device_peaks = peaks_from_gather(arr)
 
     return {
         "time_s": round(elapsed, 3),
@@ -242,14 +223,14 @@ def time_test_epoch(
     elapsed = time.perf_counter() - t0
 
     # debug:
-    print(f"rank: {rank} | total: {eval_stats[0]} | len(loader.dataset): {len(loader.dataset)}")
+    print(f"rank: {rank} | total: {eval_stats[0]} | len(loader.dataset): {len(loader.dataset)} | len(loader): {len(loader)}")
     dist.all_reduce(eval_stats, op=dist.ReduceOp.SUM)
     print(f"rank: {rank} | reduced total: {eval_stats[0]} | reduced correct: {eval_stats[1]} | reduced loss_sum: {eval_stats[2]}")
 
     arr = gather_peak_memory_gib(rank, return_on_all_ranks=False)
     per_device_peaks = []
     if arr is not None:
-        per_device_peaks = peek_peaks_all(peaks_from_gather(arr))
+        per_device_peaks = peaks_from_gather(arr)
 
     return {
         "time_s": round(elapsed, 3),
@@ -359,11 +340,11 @@ def fsdp_main(args):
             warmup_batches=2,
         )
         test_stats = time_test_epoch(
-            model, test_loader, criterion, rank
+            model, rank, test_loader, criterion
         )
 
         scheduler.step()
-        # TODO: Add some reducing here maybe? or maybe we already do a “on rank 0 only” thing in the `train` and `test` functions
+
         if local_rank == 0:
             print(
                 "\n"
@@ -372,9 +353,9 @@ def fsdp_main(args):
                 f"test: loss {test_stats['loss']:.4f}, acc {test_stats['accuracy']:.3f}, time {test_stats['time_s']:.1f}s"
             )
             print("• train:")
-            print_peaks(train_stats["per_device_peaks"], prefix="  ") # TODO: Fix this
+            print_peaks(train_stats["per_device_peaks"], prefix="  ")
             print("• test:")
-            print_peaks(test_stats["per_device_peaks"], prefix="  ") # TODO: Fix this
+            print_peaks(test_stats["per_device_peaks"], prefix="  ")
 
     # Synchronize all distributed processes
     dist.barrier()
@@ -414,7 +395,7 @@ if __name__ == "__main__":
         print("Number of workers for dataloaders = ", dataloader_num_workers)
 
     args = {
-        "per_device_batch_size": cfg.per_device_batch_sizebatch_size,
+        "per_device_batch_size": cfg.per_device_batch_size,
         "dataloader_num_workers": dataloader_num_workers,
         "learning_rate": cfg.learning_rate,
         "epochs": cfg.epochs,
@@ -427,7 +408,7 @@ if __name__ == "__main__":
     tv_model_path = cfg.tv_model_path
     torch.hub.set_dir(tv_model_path)
 
-    set_seed(42)
+    set_seed(42, local_rank)
     torch.backends.cudnn.benchmark = True
 
     if local_rank == 0:
@@ -438,12 +419,14 @@ if __name__ == "__main__":
         print(f"{torch.cuda.get_device_name(0) = }")
 
     results = fsdp_main(args)
+
     if local_rank == 0:
         loss = results['loss']
         print(f"Final loss = {loss}")
 
         train_peak_memory = results["per_device_peaks"]["train"]
         test_peak_memory = results["per_device_peaks"]["test"]
+
         max_memory_consumed = max(
             max(x[1] for x in train_peak_memory), max(x[1] for x in test_peak_memory)
         )
