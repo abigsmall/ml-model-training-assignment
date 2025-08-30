@@ -117,6 +117,7 @@ def warmup_training(
     else:
         # consume a few batches
         for _ in range(min(num_warmup_batches, len(loader))):
+            print("warmup: in da loop")
             x, y = next(it)
             x, y = x.to(rank, non_blocking=True), y.to(rank, non_blocking=True)
             optimizer.zero_grad()
@@ -160,6 +161,7 @@ def time_train_epoch(
 
     for batch in tqdm(loader):
         x, y = batch
+        if rank == 0: print(f"in batch loop: {len(batch) =} | {y.size(0) =}")
         x, y = x.to(rank, non_blocking=True), y.to(rank, non_blocking=True)
         optimizer.zero_grad()
         logits = model(x)
@@ -207,7 +209,7 @@ def time_test_epoch(
     torch.cuda.reset_peak_memory_stats()
 
     t0 = time.perf_counter()
-    # 0: total, 1: correct, 2: loss_sum
+    # 0: loss_sum, 1: correct, 2: total
     eval_stats = torch.zeros(3).to(rank)
 
     for x, y in tqdm(loader):
@@ -215,17 +217,17 @@ def time_test_epoch(
         logits = model(x)
         loss = criterion(logits, y)
 
-        eval_stats[0] += y.size(0)
+        eval_stats[0] += loss.item()
         eval_stats[1] += (logits.argmax(1) == y).sum().item()
-        eval_stats[2] += loss.item()
+        eval_stats[2] += y.size(0)
 
     torch.cuda.synchronize()
     elapsed = time.perf_counter() - t0
 
     # debug:
-    print(f"rank: {rank} | total: {eval_stats[0]} | len(loader.dataset): {len(loader.dataset)} | len(loader): {len(loader)}")
+    print(f"rank: {rank}, before AllReduce: loss_sum: {eval_stats[0]} | correct: {eval_stats[1]} | total: {eval_stats[2]} | len(loader.dataset): {len(loader.dataset)} | len(loader): {len(loader)}")
     dist.all_reduce(eval_stats, op=dist.ReduceOp.SUM)
-    print(f"rank: {rank} | reduced total: {eval_stats[0]} | reduced correct: {eval_stats[1]} | reduced loss_sum: {eval_stats[2]}")
+    print(f"rank: {rank}, after AllReduce: loss_sum: {eval_stats[0]} | correct: {eval_stats[1]} | total: {eval_stats[2]}")
 
     arr = gather_peak_memory_gib(rank, return_on_all_ranks=False)
     per_device_peaks = []
@@ -234,7 +236,7 @@ def time_test_epoch(
 
     return {
         "time_s": round(elapsed, 3),
-        "loss": eval_stats[2] / len(loader),
+        "loss": eval_stats[0] / len(loader),
         "accuracy": eval_stats[1] / eval_stats[0],
         "per_device_peaks": per_device_peaks,
     }

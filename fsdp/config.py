@@ -12,8 +12,8 @@ imagenette_train_path = '/home/ubuntu/imagenette2/train'
 imagenette_test_path = '/home/ubuntu/imagenette2/val'
 
 # -1 means full dataset
-train_data_size = 4
-test_data_size = 4
+train_data_size = 12
+test_data_size = 12
 
 # Flag used to simulate limited memory. Set to 1.0 if you wish to use 100% memory on each device
 memory_limit = 1.0
