@@ -1,5 +1,5 @@
 # Define hyperparameters
-per_device_batch_size = 82
+per_device_batch_size = 81
 dataloader_num_workers = 8
 learning_rate = 1e-4
 epochs = 1
