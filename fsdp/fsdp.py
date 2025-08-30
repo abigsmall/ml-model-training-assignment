@@ -384,7 +384,7 @@ if __name__ == "__main__":
     batch_size = cfg.per_device_batch_size * total_devices
 
     if local_rank == 0:
-        print("Per Device Batch Size = ", cfg.per_device_batch_size)
+        print("Per Device Batch Size =", cfg.per_device_batch_size)
         print("Total Effective Batch Size =", batch_size)
 
     dataloader_num_workers = cfg.dataloader_num_workers
