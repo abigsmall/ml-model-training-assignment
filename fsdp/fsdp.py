@@ -2,9 +2,10 @@ import torch
 import torch.nn as nn
 import torchvision
 from torchvision import models, datasets
+
 torchvision.disable_beta_transforms_warning()
 from torchvision.transforms import v2 as T
-from torch.utils.data import DataLoader, SubsetRandomSampler, Subset
+from torch.utils.data import DataLoader, Subset
 from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy
@@ -27,9 +28,11 @@ import functools
 def setup():
     dist.init_process_group("nccl")
 
+
 # Cleanup the distributed process group
 def cleanup():
     dist.destroy_process_group()
+
 
 def set_seed(seed, rank):
     """Set seeds for reproducibility."""
@@ -41,7 +44,7 @@ def set_seed(seed, rank):
     # Optional: If you use cudnn backend and want to be even more rigorous
     # torch.backends.cudnn.deterministic = True
     # torch.backends.cudnn.benchmark = False
-    if (rank == 0):
+    if rank == 0:
         print(f"Seeds set to {seed}")
 
 
@@ -232,9 +235,9 @@ def time_test_epoch(
 
 
 def fsdp_main(args):
-    local_rank = int(os.environ['LOCAL_RANK'])
-    rank = int(os.environ['RANK'])
-    world_size = int(os.environ['WORLD_SIZE'])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    rank = int(os.environ["RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
 
     batch_size = args["per_device_batch_size"]
     dataloader_num_workers = args["dataloader_num_workers"]
@@ -273,32 +276,32 @@ def fsdp_main(args):
             print("Using subset for test_dataset")
         test_dataset = Subset(test_dataset, range(test_data_size))
 
-    train_sampler = DistributedSampler(train_dataset, rank=rank, num_replicas=world_size, shuffle=True)
+    train_sampler = DistributedSampler(
+        train_dataset, rank=rank, num_replicas=world_size, shuffle=True
+    )
     test_sampler = DistributedSampler(test_dataset, rank=rank, num_replicas=world_size)
 
     setup()
 
-    train_kwargs = {"batch_size": batch_size, "num_workers": dataloader_num_workers, "sampler": train_sampler, "pin_memory": True, "persistent_workers": True, "prefetch_factor": 4}
-    test_kwargs = {"batch_size": batch_size, "num_workers": dataloader_num_workers, "sampler": test_sampler, "pin_memory": True, "persistent_workers": True, "prefetch_factor": 4}
+    train_kwargs = {
+        "batch_size": batch_size,
+        "num_workers": dataloader_num_workers,
+        "sampler": train_sampler,
+        "pin_memory": True,
+        "persistent_workers": True,
+        "prefetch_factor": 4,
+    }
+    test_kwargs = {
+        "batch_size": batch_size,
+        "num_workers": dataloader_num_workers,
+        "sampler": test_sampler,
+        "pin_memory": True,
+        "persistent_workers": True,
+        "prefetch_factor": 4,
+    }
 
     train_loader = DataLoader(train_dataset, **train_kwargs)
     test_loader = DataLoader(test_dataset, **test_kwargs)
-
-    # # if we want to run a quick sanity check with the first 4 images
-    # sanity_indices = list(range(4))
-    # sanity_dataset = Subset(test_dataset, sanity_indices)
-
-    # # Create a DataLoader for the sanity dataset
-    # sanity_loader = DataLoader(
-    #     sanity_dataset,
-    #     batch_size=batch_size,
-    #     shuffle=False,  # No need to shuffle for a fixed sanity set
-    #     num_workers=cfg.dataloader_num_workers,
-    #     pin_memory=True,
-    # )
-
-    # if local_rank == 0:
-    #     print(f"Created sanity_dataset with {len(sanity_dataset)} images.")
 
     my_auto_wrap_policy = functools.partial(
         size_based_auto_wrap_policy, min_num_params=100
@@ -312,7 +315,12 @@ def fsdp_main(args):
     model = models.resnet152(weights="DEFAULT")
     model.fc = nn.Linear(model.fc.in_features, 10)
 
-    model = FSDP(model, auto_wrap_policy=my_auto_wrap_policy, sharding_strategy=ShardingStrategy.FULL_SHARD, device_id=torch.cuda.current_device())
+    model = FSDP(
+        model,
+        auto_wrap_policy=my_auto_wrap_policy,
+        sharding_strategy=ShardingStrategy.FULL_SHARD,
+        device_id=torch.cuda.current_device(),
+    )
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -330,9 +338,7 @@ def fsdp_main(args):
             do_warmup=(epoch == 1),
             warmup_batches=2,
         )
-        test_stats = time_test_epoch(
-            model, rank, test_loader, criterion
-        )
+        test_stats = time_test_epoch(model, rank, test_loader, criterion)
 
         scheduler.step()
 
@@ -355,9 +361,7 @@ def fsdp_main(args):
     elapsed = time.perf_counter() - t0
     time_per_epoch_s = elapsed / epochs
     if local_rank == 0:
-        print(
-            f"Time taken per epoch (seconds) {time_per_epoch_s:.2f}s"
-        )
+        print(f"Time taken per epoch (seconds) {time_per_epoch_s:.2f}s")
 
     return {
         "loss": train_stats["loss"],
@@ -370,8 +374,8 @@ def fsdp_main(args):
 
 
 if __name__ == "__main__":
-    local_rank = int(os.environ['LOCAL_RANK'])
-    total_devices = int(os.environ['WORLD_SIZE'])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    total_devices = int(os.environ["WORLD_SIZE"])
 
     if local_rank == 0:
         print(f"Training on {total_devices} devices")
@@ -412,7 +416,7 @@ if __name__ == "__main__":
     results = fsdp_main(args)
 
     if local_rank == 0:
-        loss = results['loss']
+        loss = results["loss"]
         print(f"Final loss = {loss}")
 
         train_peak_memory = results["per_device_peaks"]["train"]
@@ -423,4 +427,6 @@ if __name__ == "__main__":
         )
         max_memory_consumed = round(max_memory_consumed * 1.073741824, 2)
         print(f"Max Memory Consumed Per Device = {max_memory_consumed} GB")
-        print(f"loss: {loss:.4f} | {results['time_per_epoch_s']:.2f}s | {max_memory_consumed} GB")
+        print(
+            f"loss: {loss:.4f} | {results['time_per_epoch_s']:.2f}s | {max_memory_consumed} GB"
+        )
