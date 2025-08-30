@@ -315,10 +315,12 @@ def fsdp_main(args):
     model = models.resnet152(weights="DEFAULT")
     model.fc = nn.Linear(model.fc.in_features, 10)
 
+    cpu_offload_config = CPUOffload(offload_params=True)
     model = FSDP(
         model,
         auto_wrap_policy=my_auto_wrap_policy,
         sharding_strategy=ShardingStrategy.FULL_SHARD,
+        cpu_offload=cpu_offload_config,
         device_id=torch.cuda.current_device(),
     )
 
