@@ -117,7 +117,6 @@ def warmup_training(
     else:
         # consume a few batches
         for _ in range(min(num_warmup_batches, len(loader))):
-            print("warmup: in da loop")
             x, y = next(it)
             x, y = x.to(rank, non_blocking=True), y.to(rank, non_blocking=True)
             optimizer.zero_grad()
@@ -156,12 +155,10 @@ def time_train_epoch(
     torch.cuda.reset_peak_memory_stats()
 
     t0 = time.perf_counter()
-    # 0: loss_sum, 1: total
-    loss_sum = torch.zeros(3).to(rank)
+    loss_sum = torch.zeros(1).to(rank)
 
     for batch in tqdm(loader):
         x, y = batch
-        if rank == 0: print(f"in batch loop: {len(batch) =} | {y.size(0) =}")
         x, y = x.to(rank, non_blocking=True), y.to(rank, non_blocking=True)
         optimizer.zero_grad()
         logits = model(x)
@@ -170,17 +167,12 @@ def time_train_epoch(
         optimizer.step()
 
         loss_sum[0] += loss.item()
-        loss_sum[1] += len(batch)
-        loss_sum[2] += y.size(0)
 
-    
     torch.cuda.synchronize()
     elapsed = round(time.perf_counter() - t0, 3)
 
     # Sum the loss across all distributed processes
-    print(f"train: before reduce: rank: {rank} | len(loader.dataset): {len(loader.dataset)} | len(loader): {len(loader)} | loss_sum[0]: {loss_sum[0]} | loss_sum[1]: {loss_sum[1]} | loss_sum[2]: {loss_sum[2]}")
     dist.all_reduce(loss_sum, op=dist.ReduceOp.SUM)
-    print(f"train: after reduce: rank: {rank} | len(loader.dataset): {len(loader.dataset)} | len(loader): {len(loader)} | loss_sum[0]: {loss_sum[0]} | loss_sum[1]: {loss_sum[1]} | loss_sum[2]: {loss_sum[2]}")
 
     arr = gather_peak_memory_gib(rank, return_on_all_ranks=False)
     per_device_peaks = []
@@ -224,10 +216,7 @@ def time_test_epoch(
     torch.cuda.synchronize()
     elapsed = time.perf_counter() - t0
 
-    # debug:
-    print(f"rank: {rank}, before AllReduce: loss_sum: {eval_stats[0]} | correct: {eval_stats[1]} | total: {eval_stats[2]} | len(loader.dataset): {len(loader.dataset)} | len(loader): {len(loader)}")
     dist.all_reduce(eval_stats, op=dist.ReduceOp.SUM)
-    print(f"rank: {rank}, after AllReduce: loss_sum: {eval_stats[0]} | correct: {eval_stats[1]} | total: {eval_stats[2]}")
 
     arr = gather_peak_memory_gib(rank, return_on_all_ranks=False)
     per_device_peaks = []
