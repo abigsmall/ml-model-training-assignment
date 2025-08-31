@@ -229,7 +229,7 @@ def time_test_epoch(
     return {
         "time_s": round(elapsed, 3),
         "loss": eval_stats[0] / len(loader),
-        "accuracy": eval_stats[1] / eval_stats[0],
+        "accuracy": eval_stats[1] / eval_stats[2],
         "per_device_peaks": per_device_peaks,
     }
 
