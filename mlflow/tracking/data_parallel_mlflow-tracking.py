@@ -404,8 +404,6 @@ def data_parallel_main(args):
 
 if __name__ == "__main__":
     mlflow.set_tracking_uri(cfg.MLFLOW_TRACKING_URI)
-    parent_run = mlflow.start_run(experiment_id=cfg.MLFLOW_EXPERIMENT_ID)
-    mlflow.end_run(status="FINISHED")
 
     total_devices = len(cfg.visible_devices) if cfg.do_data_parallel else 1
     print(f"Training on {total_devices} devices")

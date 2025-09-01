@@ -1,7 +1,7 @@
 # Define hyperparameters
-do_data_parallel = True
+do_data_parallel = False
 
-per_device_batch_size = 1
+per_device_batch_size = [8, 16]
 dataloader_num_workers = 2
 learning_rate = 1e-4
 epochs = 1
@@ -14,10 +14,13 @@ imagenette_train_path = '/home/ubuntu/imagenette2/train'
 imagenette_test_path = '/home/ubuntu/imagenette2/val'
 
 # -1 means full dataset
-train_data_size = 4
-test_data_size = 4
+train_data_size = 100
+test_data_size = 20
 
 device = 'cuda'
+
+num_gpu = 1
+num_samples = 1
 
 # Flag used to simulate limited memory. Set to 1.0 if you wish to use 100% memory on each device
 memory_limit = 1.0
