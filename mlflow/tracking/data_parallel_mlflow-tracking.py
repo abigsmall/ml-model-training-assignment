@@ -2,11 +2,15 @@ import torch
 import torch.nn as nn
 import torchvision
 from torchvision import models, datasets
+
 torchvision.disable_beta_transforms_warning()
 from torchvision.transforms import v2 as T
 from torch.utils.data import DataLoader, SubsetRandomSampler, Subset
 
+import mlflow
+
 import numpy as np
+
 
 import time
 from tqdm import tqdm
@@ -178,6 +182,8 @@ def time_test_epoch(
 
     t0 = time.perf_counter()
     total, correct, loss_sum = 0, 0, 0.0
+    true_labels_list = []
+    predicted_labels_list = []
 
     for x, y in tqdm(loader):
         x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
@@ -188,9 +194,16 @@ def time_test_epoch(
         correct += (logits.argmax(1) == y).sum().item()
         total += y.size(0)
 
+        true_labels_list.append(y)
+        predicted_labels_list.append(logits.argmax(1))
+
     for d in device_ids:
         torch.cuda.synchronize(d)
     elapsed = time.perf_counter() - t0
+
+    # Concatenate the tensors and convert to lists after the loop
+    true_labels = torch.cat(true_labels_list).tolist()
+    predicted_labels = torch.cat(predicted_labels_list).tolist()
 
     per_device_peaks = peek_peaks_all(device_ids)
 
@@ -198,11 +211,16 @@ def time_test_epoch(
         "time_s": round(elapsed, 3),
         "loss": loss_sum / len(loader),
         "accuracy": correct / total,
+        "true_labels": true_labels,
+        "predicted_labels": predicted_labels,
         "per_device_peaks": per_device_peaks,
     }
 
 
 def data_parallel_main(args):
+    mlflow.set_tracking_uri(cfg.MLFLOW_TRACKING_URI)
+    parent_run = args["mlflow_parent_run"]
+
     do_data_parallel = args["do_data_parallel"]
 
     batch_size = args["batch_size"]
@@ -315,43 +333,68 @@ def data_parallel_main(args):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     print("Training on " + str(device))
-    t0 = time.perf_counter()
 
-    for epoch in tqdm(range(epochs)):
-        train_stats = time_train_epoch(
-            model,
-            train_loader,
-            optimizer,
-            criterion,
-            device,
-            visible_devices,
-            do_warmup=(epoch == 1),
-            warmup_batches=2,
-        )
-        test_stats = time_test_epoch(
-            model, test_loader, criterion, device, visible_devices
-        )
+    with mlflow.start_run(experiment_id=cfg.MLFLOW_EXPERIMENT_ID, nested=True):
+        mlflow.set_tag("mlflow.parentRunId", parent_run.info.run_id)
 
-        scheduler.step()
-        print(
-            "\n"
-            f"Epoch {epoch + 1}/{epochs} | "
-            f"train: loss {train_stats['loss']:.4f}, time {train_stats['time_s']:.1f}s | "
-            f"test: loss {test_stats['loss']:.4f}, acc {test_stats['accuracy']:.3f}, time {test_stats['time_s']:.1f}s"
-        )
-        print("• train:")
-        print_peaks(train_stats["per_device_peaks"], prefix="  ")
-        print("• test:")
-        print_peaks(test_stats["per_device_peaks"], prefix="  ")
+        mlflow.log_param("batch_size", batch_size)
+        mlflow.log_param("learning_rate", learning_rate)
+        mlflow.log_param("epochs", epochs)
 
-    elapsed = time.perf_counter() - t0
+        t0 = time.perf_counter()
+
+        for epoch in tqdm(range(epochs)):
+            train_stats = time_train_epoch(
+                model,
+                train_loader,
+                optimizer,
+                criterion,
+                device,
+                visible_devices,
+                do_warmup=(epoch == 1),
+                warmup_batches=2,
+            )
+            test_stats = time_test_epoch(
+                model, test_loader, criterion, device, visible_devices
+            )
+
+            train_loss = train_stats["loss"]
+            test_accuracy = test_stats["accuracy"]
+
+            prediction_dict = {
+                "inputs": "<placeholder>",  # gotta do some custom dataloader stuff
+                "outputs": test_stats["predicted_labels"],
+                "true": test_stats["true_labels"],
+            }
+            mlflow.log_table(
+                data=prediction_dict, artifact_file="classification_eval_results.json"
+            )
+
+            mlflow.log_metric(
+                {"Train Loss": train_loss, "Test Accuracy": test_accuracy}, step=epoch
+            )
+
+            scheduler.step()
+
+            print(
+                "\n"
+                f"Epoch {epoch + 1}/{epochs} | "
+                f"train: loss {train_loss:.4f}, time {train_stats['time_s']:.1f}s | "
+                f"test: loss {test_stats['loss']:.4f}, acc {test_accuracy:.3f}, time {test_stats['time_s']:.1f}s"
+            )
+            print("• train:")
+            print_peaks(train_stats["per_device_peaks"], prefix="  ")
+            print("• test:")
+            print_peaks(test_stats["per_device_peaks"], prefix="  ")
+
+        elapsed = time.perf_counter() - t0
+        mlflow.pytorch.log_model(model, "../model_data")
+
     time_per_epoch_s = elapsed / epochs
-    print(
-        f"Time taken per epoch (seconds) {time_per_epoch_s:.2f}s"
-    )
+    print(f"Time taken per epoch (seconds) {time_per_epoch_s:.2f}s")
 
     return {
-        "loss": train_stats["loss"],
+        "loss": train_loss,
         "time_per_epoch_s": time_per_epoch_s,
         "per_device_peaks": {
             "train": train_stats["per_device_peaks"],
@@ -396,7 +439,7 @@ if __name__ == "__main__":
     print(f"{torch.cuda.get_device_name(0) = }")
 
     results = data_parallel_main(args)
-    loss = results['loss']
+    loss = results["loss"]
     print(f"Final loss = {loss}")
 
     train_peak_memory = results["per_device_peaks"]["train"]
@@ -410,4 +453,6 @@ if __name__ == "__main__":
     )
     max_memory_consumed = round(max_memory_consumed * 1.073741824, 2)
     print(f"Max Memory Consumed Per Device = {max_memory_consumed} GB")
-    print(f"loss: {loss:.4f} | {results['time_per_epoch_s']:.2f}s | {max_memory_consumed} GB")
+    print(
+        f"loss: {loss:.4f} | {results['time_per_epoch_s']:.2f}s | {max_memory_consumed} GB"
+    )
