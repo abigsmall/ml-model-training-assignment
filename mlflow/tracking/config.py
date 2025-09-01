@@ -27,4 +27,4 @@ visible_devices = [0,1,2,3]
 
 # MLflow tracking
 MLFLOW_TRACKING_URI = 'http://localhost:5001'
-MLFLOW_EXPERIMENT_ID = '1'
+MLFLOW_EXPERIMENT_ID = '2'

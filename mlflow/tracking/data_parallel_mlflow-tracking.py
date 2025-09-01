@@ -218,7 +218,6 @@ def time_test_epoch(
 
 
 def data_parallel_main(args):
-    mlflow.set_tracking_uri(cfg.MLFLOW_TRACKING_URI)
     parent_run = args["mlflow_parent_run"]
 
     do_data_parallel = args["do_data_parallel"]
@@ -370,7 +369,7 @@ def data_parallel_main(args):
                 data=prediction_dict, artifact_file="classification_eval_results.json"
             )
 
-            mlflow.log_metric(
+            mlflow.log_metrics(
                 {"Train Loss": train_loss, "Test Accuracy": test_accuracy}, step=epoch
             )
 
@@ -388,7 +387,7 @@ def data_parallel_main(args):
             print_peaks(test_stats["per_device_peaks"], prefix="  ")
 
         elapsed = time.perf_counter() - t0
-        mlflow.pytorch.log_model(model, "../model_data")
+        mlflow.pytorch.log_model(model, "model_data")
 
     time_per_epoch_s = elapsed / epochs
     print(f"Time taken per epoch (seconds) {time_per_epoch_s:.2f}s")
@@ -404,6 +403,10 @@ def data_parallel_main(args):
 
 
 if __name__ == "__main__":
+    mlflow.set_tracking_uri(cfg.MLFLOW_TRACKING_URI)
+    parent_run = mlflow.start_run(experiment_id=cfg.MLFLOW_EXPERIMENT_ID)
+    mlflow.end_run(status="FINISHED")
+
     total_devices = len(cfg.visible_devices) if cfg.do_data_parallel else 1
     print(f"Training on {total_devices} devices")
     batch_size = cfg.per_device_batch_size * total_devices
@@ -424,6 +427,7 @@ if __name__ == "__main__":
         "imagenette_test_path": cfg.imagenette_test_path,
         "train_data_size": cfg.train_data_size,
         "test_data_size": cfg.test_data_size,
+        "mlflow_parent_run": parent_run,
     }
 
     tv_model_path = cfg.tv_model_path
@@ -444,10 +448,6 @@ if __name__ == "__main__":
 
     train_peak_memory = results["per_device_peaks"]["train"]
     test_peak_memory = results["per_device_peaks"]["test"]
-    print(f"{type(train_peak_memory) = }")
-    print(f"{train_peak_memory =}")
-    print(f"{type(test_peak_memory) = }")
-    print(f"{test_peak_memory =}")
     max_memory_consumed = max(
         max(x[1] for x in train_peak_memory), max(x[1] for x in test_peak_memory)
     )
