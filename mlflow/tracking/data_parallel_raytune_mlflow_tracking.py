@@ -33,6 +33,14 @@ def set_seed(seed):
     print(f"Seeds set to {seed}")
 
 
+def resolve_visible_devices_for_dp():
+    # If Ray set CUDA_VISIBLE_DEVICES, just use logical indices 0..N-1
+    if torch.cuda.is_available():
+        n = torch.cuda.device_count()
+        return list(range(n))  # [0,1,...,n-1] within this process
+    return []
+
+
 def reset_peaks_all(devices=None):
     """Reset peak memory stats on all (visible) CUDA devices."""
     if devices is None:
@@ -218,7 +226,12 @@ def time_test_epoch(
 
 
 def data_parallel_main(args):
+    mlflow.set_tracking_uri(cfg.MLFLOW_TRACKING_URI)
     parent_run = args["mlflow_parent_run"]
+
+    torch.hub.set_dir(cfg.tv_model_path)
+    set_seed(42)
+    torch.backends.cudnn.benchmark = True
 
     do_data_parallel = args["do_data_parallel"]
 
@@ -229,7 +242,7 @@ def data_parallel_main(args):
     learning_rate = args["learning_rate"]
     epochs = args["epochs"]
     device = torch.device(args["device"])
-    visible_devices = cfg.visible_devices
+    visible_devices = getattr(cfg, "visible_devices", resolve_visible_devices_for_dp())
     imagenette_train_path = args["imagenette_train_path"]
     imagenette_test_path = args["imagenette_test_path"]
 

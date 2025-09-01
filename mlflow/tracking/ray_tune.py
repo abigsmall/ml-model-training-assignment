@@ -1,4 +1,4 @@
-# This file is, aside from this comment, untouched from the classroom demo code that was provided to me.
+# Justin Hong: This file is largely identical to the classroom demo code that was provided to me.
 from ray import tune
 from ray.tune.schedulers import HyperBandScheduler
 import config as cfg
@@ -17,19 +17,21 @@ parent_run = mlflow.start_run(experiment_id=cfg.MLFLOW_EXPERIMENT_ID)
 # of child runs
 mlflow.end_run(status="FINISHED")
 
+total_devices = len(cfg.visible_devices) if cfg.do_data_parallel else 1
 
 config_space = {
     "do_data_parallel": cfg.do_data_parallel,
     "batch_size": tune.grid_search(
-        cfg.per_device_batch_size
+        [x * total_devices for x in cfg.per_device_batch_size]
     ),  # Specify the batch sizes you want to tune
+    "dataloader_num_workers": cfg.dataloader_num_workers,
     "learning_rate": cfg.learning_rate,
     "epochs": cfg.epochs,
+    "device": cfg.device,
+    "imagenette_train_path": cfg.imagenette_train_path,
+    "imagenette_test_path": cfg.imagenette_test_path,
     "train_data_size": cfg.train_data_size,
     "test_data_size": cfg.test_data_size,
-    "max_length": cfg.max_length,
-    "model_name": cfg.model_name,
-    "device": cfg.device,
     "mlflow_parent_run": parent_run,
 }
 

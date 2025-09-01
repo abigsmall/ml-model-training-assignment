@@ -25,9 +25,6 @@ num_samples = 1
 # Flag used to simulate limited memory. Set to 1.0 if you wish to use 100% memory on each device
 memory_limit = 1.0
 
-# Only use the specified devices
-visible_devices = [0,1,2,3]
-
 # MLflow tracking
 MLFLOW_TRACKING_URI = 'http://localhost:5001'
 MLFLOW_EXPERIMENT_ID = '2'
